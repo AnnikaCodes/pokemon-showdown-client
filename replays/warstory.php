@@ -77,7 +77,7 @@ else if ($_REQUEST['name'])// && $REPLAYS[$_REQUEST['name']])
 
 	include '../../pokemonshowdown.com/lib/ntbb-database.lib.php';
 
-	$res = $psdb->query("SELECT * FROM `ntbb_replays` WHERE `id` = '".$psdb->escape($_REQUEST['name'])."'");
+	$res = $psdb->query("SELECT * FROM replays WHERE id = '".$psdb->escape($_REQUEST['name'])."'");
 	$replay = $psdb->fetch_assoc($res);
 
 	if (!$replay) {
@@ -277,8 +277,8 @@ function endCallback(battle)
 
 	bbcode = teamcode + bbcode;
 
-	bbcode = "[indent]>>>[url=\"http://<?= $psconfig['routes']['client'] ?>/replay/battle-<?php echo $name ?>\"][size=\"3\"]Click to [b]watch this replay[/b]![/size][/url]<<<[/indent]\n\n"+bbcode;
-	bbcode += "\n\n[indent]>>>[url=\"http://<?= $psconfig['routes']['client'] ?>/replay/battle-<?php echo $name ?>\"][size=\"3\"]Click to [b]watch this replay[/b]![/size][/url]<<<[/indent]";
+	bbcode = "[indent]>>>[url=http://<?= $psconfig['routes']['client'] ?>/replay/battle-<?php echo $name ?>][size=3]Click to [b]watch this replay[/b]![/size][/url]<<<[/indent]\n\n"+bbcode;
+	bbcode += "\n\n[indent]>>>[url=http://<?= $psconfig['routes']['client'] ?>/replay/battle-<?php echo $name ?>][size=3]Click to [b]watch this replay[/b]![/size][/url]<<<[/indent]";
 	$('#warstory').prepend('<textarea rows="20" cols="90"></textarea>');
 	$('#warstory textarea').text(bbcode);
 }

@@ -39,8 +39,8 @@ if ($lastmodified && (time() - $lastmodified < 60 * 10)) {
 	$serverbits = file_get_contents($serverbitscache);
 } else {
 	include_once __DIR__ . '/../config/servers.inc.php';
-	include_once __DIR__ . '/../lib/ntbb-database.lib.php';
-	$query = $psdb->query("SELECT `serverid`, `date`, `usercount` FROM `ntbb_userstats`");
+	include_once  __DIR__ . '/../lib/ntbb-database.lib.php';
+	$query = $psdb->query("SELECT serverid, extract(epoch from date) as date, usercount FROM userstats");
 	$usercount = array();
 	$timenow = time();
 	while ($row = $psdb->fetch_assoc($query)) {

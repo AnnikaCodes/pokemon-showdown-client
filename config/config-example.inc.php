@@ -21,8 +21,6 @@ $psconfig = [
 	'username' => '',
 	'password' => '',
 	'database' => '',
-	'prefix' => 'ps_',
-	'charset' => 'utf8',
 
 // routes
 	'routes' => $routes,

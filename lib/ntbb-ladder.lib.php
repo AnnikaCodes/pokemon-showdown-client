@@ -129,14 +129,14 @@ class NTBBLadder {
 
 	function clearRating($user) {
 		$ladderdb->query(
-			"UPDATE `{$ladderdb->prefix}ladder` SET `elo`=1000, `col1`=0, `w`=0, `l`=0, `t`=0 WHERE `userid`=? AND `formatid`=?",
+			"UPDATE ladder SET elo=1000, col1=0, w=0, l=0, t=0 WHERE userid=? AND formatid=?",
 			[$user['userid'], $this->formatid]
 		);
 	}
 	function clearWL($user) {
 		global $ladderdb;
 		$ladderdb->query(
-			"UPDATE `{$ladderdb->prefix}ladder` SET `w`=0, `l`=0, `t`=0 WHERE `userid`=? AND `formatid`=?",
+			"UPDATE ladder SET w=0, l=0, t=0 WHERE userid=? AND formatid=?",
 			[$user['userid'], $this->formatid]
 		);
 	}
@@ -144,7 +144,7 @@ class NTBBLadder {
 		global $ladderdb;
 		if (!@$user['rating']) {
 			$res = $ladderdb->query(
-				"SELECT * FROM `{$ladderdb->prefix}ladder` WHERE `userid`=? AND `formatid`=? LIMIT 1",
+				"SELECT *, extract(epoch from rptime) as rptime FROM ladder WHERE userid=? AND formatid=? LIMIT 1",
 				[$user['userid'], $this->formatid]
 			);
 			if (!$res) {
@@ -158,7 +158,7 @@ class NTBBLadder {
 				}
 				$rp = $this->getrp();
 				$ladderdb->query(
-					"INSERT INTO `{$ladderdb->prefix}ladder` (`formatid`,`userid`,`username`,`rptime`,`rpdata`,`col1`) VALUES (?,?,?,?,'',0)",
+					"INSERT INTO ladder (formatid,userid,username,rptime,rpdata,col1) VALUES (?,?,?,to_timestamp(?),'',0)",
 					[$this->formatid, $user['userid'], $user['username'], $rp]
 				);
 				$user['rating'] = array(
@@ -192,7 +192,7 @@ class NTBBLadder {
 	function getAllRatings(&$user) {
 		global $ladderdb;
 		if (!@$user['ratings']) {
-			$res = $ladderdb->query("SELECT * FROM `{$ladderdb->prefix}ladder` WHERE `userid`=?", [$user['userid']]);
+			$res = $ladderdb->query("SELECT *, extract(epoch from rptime) as rptime FROM ladder WHERE userid=?", [$user['userid']]);
 			if (!$res) {
 				return false;
 			}
@@ -230,12 +230,12 @@ class NTBBLadder {
 				// to return exactly $limit results, but should be 'good enough' in practice.
 				$overfetch = $limit * 2;
 				$res = $ladderdb->query(
-					"SELECT * FROM (SELECT * FROM `{$ladderdb->prefix}ladder` WHERE `formatid` = ? ORDER BY `elo` DESC LIMIT $overfetch) AS `unusedalias` WHERE `userid` LIKE ? LIMIT $limit",
+					"SELECT *, extract(epoch from rptime) as rptime FROM (SELECT * FROM ladder WHERE formatid = ? ORDER BY elo DESC LIMIT $overfetch) AS unusedalias WHERE userid LIKE ? LIMIT $limit",
 					[$this->formatid, "$prefix%"]
 				);
 			} else {
 				$res = $ladderdb->query(
-					"SELECT * FROM `{$ladderdb->prefix}ladder` WHERE `formatid` = ? ORDER BY `elo` DESC LIMIT $limit",
+					"SELECT *, extract(epoch from rptime) as rptime FROM ladder WHERE formatid = ? ORDER BY elo DESC LIMIT $limit",
 					[$this->formatid]
 				);
 			}
@@ -265,7 +265,7 @@ class NTBBLadder {
 
 	function clearAllRatings() {
 		global $ladderdb;
-		$res = $ladderdb->query("DELETE FROM `{$ladderdb->prefix}ladder` WHERE `formatid` = '{$this->formatid}'");
+		$res = $ladderdb->query("DELETE FROM ladder WHERE formatid = '{$this->formatid}'");
 	}
 
 	function saveRating($user) {
@@ -274,7 +274,7 @@ class NTBBLadder {
 		$r = $user['rating'];
 
 		return !!$ladderdb->query(
-			"UPDATE `{$ladderdb->prefix}ladder` SET `w`=?,`l`=?,`t`=?,`r`=?,`rd`=?,`sigma`=?,`rptime`=?,`rpr`=?,`rprd`=?,`rpsigma`=?,`rpdata`=?,`gxe`=?,`elo`=?,`col1`=? WHERE `entryid`=? LIMIT 1",
+			"UPDATE ladder SET w=?,l=?,t=?,r=?,rd=?,sigma=?,rptime=to_timestamp(?),rpr=?,rprd=?,rpsigma=?,rpdata=?,gxe=?,elo=?,col1=? WHERE entryid=?",
 			[$r['w'], $r['l'], $r['t'], $r['r'], $r['rd'], $r['sigma'], $r['rptime'], $r['rpr'], $r['rprd'], $r['rpsigma'], $r['rpdata'], $r['gxe'], $r['elo'], $r['col1'], $r['entryid']]
 		);
 	}

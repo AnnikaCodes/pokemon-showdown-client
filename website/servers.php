@@ -2,7 +2,7 @@
 
 include_once __DIR__ . '/../config/config.inc.php';
 include_once __DIR__ . '/../config/servers.inc.php';
-include_once '../lib/ntbb-session.lib.php';
+include_once  __DIR__ . '/../lib/ntbb-session.lib.php';
 include 'style/wrapper.inc.php';
 
 $id = '';
@@ -290,7 +290,7 @@ if (@$_POST['act'] === 'addserver') {
 $activeservers = [];
 $inactiveservers = [];
 
-$res = $psdb->query("SELECT `serverid`, `date`, `usercount` FROM `ntbb_userstats`");
+$res = $psdb->query("SELECT serverid, extract(epoch from date) as date, usercount FROM userstats");
 while ($row = $psdb->fetch_assoc($res)) {
 	$serverid = $row['serverid'];
 	if (!isset($PokemonServers[$serverid])) continue;

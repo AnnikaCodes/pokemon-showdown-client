@@ -25,7 +25,7 @@ function printResultSet($res) {
 		echo '[' . $delta . ',' . $row['usercount'] . ']';
 		if ($row = $psdb->fetch_assoc($res)) {
 			if (!$po && ($row['programid'] !== 'showdown')) {
-				echo ']}, {"label": "Pok&eacute;mon Online (<a target=\"_blank\" href=\"https://gist.github.com/cathyjf/5456648\">src</a>)", "data": [';
+				echo ']}, {"label": "Pok&eacute;mon Online (<a target=_blank href=https://gist.github.com/cathyjf/5456648\">src</a>)", "data": [';
 				$last = 0;
 				$po = true;
 			} else {
@@ -41,10 +41,10 @@ function printResultSet($res) {
 function printRecentResults() {
 	global $psdb;
 	$res = $psdb->query(
-		"SELECT `date`, `usercount`, `programid` " .
-		"FROM `ntbb_userstatshistory` " .
-		"WHERE (`date` > (UNIX_TIMESTAMP() - 60*60*24*3) * 1000) " .
-		"ORDER BY `programid` ASC, `date` ASC");
+		"SELECT extract(epoch from date) as date, usercount, programid " .
+		"FROM userstatshistory " .
+		"WHERE (extract(epoch from date) > (extract(epoch from now()) - 60*60*24*3) * 1000) " .
+		"ORDER BY programid ASC, date ASC");
 	printResultSet($res);
 }
 
@@ -60,11 +60,10 @@ function printJsonResults($startDate, $endDate) {
 		$interval = $intervalLimit;
 	}
 	$res = $psdb->query(
-		"SELECT `date`, `usercount`, `programid` " .
-		"FROM `ntbb_userstatshistory` " .
-		"WHERE `date` BETWEEN " . (int)$startDate . " AND " . (int)$endDate . " " .
-		"GROUP BY FLOOR(`date`/" . $interval . "), `programid` " .
-		"ORDER BY `programid` ASC, `date` ASC"
+		"SELECT DISTINCT ON (programid, extract(epoch from date)/" . $interval . ") extract(epoch from date) as date, usercount, programid " .
+		"FROM userstatshistory " .
+		"WHERE extract(epoch from date) BETWEEN " . (int)$startDate . " AND " . (int)$endDate . " " .
+		"ORDER BY programid ASC, extract(epoch from date)/" . $interval . " ASC"
 	);
 	printResultSet($res);
 }
@@ -76,10 +75,10 @@ if (isset($_REQUEST['format']) && ($_REQUEST['format'] === 'json')) {
 }
 
 $res = $psdb->query(
-	'SELECT `date`, `usercount` ' .
-	'FROM `ntbb_userstatshistory` ' .
-	'WHERE `programid`=\'showdown\' ' .
-	'ORDER BY `usercount` DESC ' .
+	'SELECT extract(epoch from "date") as "date", "usercount" ' .
+	'FROM "userstatshistory" ' .
+	'WHERE "programid"=\'showdown\' ' .
+	'ORDER BY "usercount" DESC ' .
 	'LIMIT 1');
 
 $maxUsers = null;

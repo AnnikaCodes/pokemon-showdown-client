@@ -5,9 +5,14 @@ ini_set('display_errors', TRUE);
 ini_set('display_startup_errors', TRUE);
 
 include_once __DIR__ . '/../config/config.inc.php';
-include '../lib/ntbb-session.lib.php';
-include '../lib/ntbb-ladder.lib.php';
-include 'lib/panels.lib.php';
+include  '../lib/ntbb-session.lib.php';
+include  '../lib/ntbb-ladder.lib.php';
+include  'lib/panels.lib.php';
+
+$IP_REGEX = "/\b(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\." .
+	"(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\." .
+	"(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\." .
+	"(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\b/";
 
 $userid = false;
 $user = false;
@@ -46,7 +51,7 @@ if (!$ip && !$entry) {
 		</form>
 	</div></div>
 <?php
-} else if ($ip) {
+} else if ($ip && preg_match($IP_REGEX, $ip)) {
 ?>
 	<div class="pfx-panel"><div class="pfx-body ladder">
 		<a href="/ladder/" class="pfx-backbutton" data-target="back"><i class="fa fa-chevron-left"></i> Ladder</a>
@@ -58,15 +63,15 @@ if (!$ip && !$entry) {
 	if ($users->csrfCheck()) {
 		$csrfOk = true;
 	}
-	$userlist = $psdb->query("SELECT `username`, `userid`, `banstate` FROM `ntbb_users` WHERE `ip` = ?", [$ip]);
+	$userlist = $psdb->query("SELECT username, userid, banstate FROM users WHERE ip = ?", [$ip]);
 	if ($csrfOk && isset($_POST['standing'])) {
 		$newStanding = intval($_POST['standing']);
-		$psdb->query("UPDATE ntbb_users SET banstate = ? WHERE ip = ? AND banstate != 100", [$newStanding, $ip]);
+		$psdb->query("UPDATE users SET banstate = ? WHERE ip = ? AND banstate != 100", [$newStanding, $ip]);
 
 		foreach ($userlist as $row) {
 			$modlogentry = "Standing changed to $newStanding ({$STANDINGS[$newStanding]}): {$_POST['allreason']}";
 			$psdb->query(
-				"INSERT INTO `{$psdb->prefix}usermodlog` (`userid`,`actorid`,`date`,`ip`,`entry`) VALUES (?, ?, ?, ?, ?)",
+				"INSERT INTO usermodlog (userid,actorid,date,ip,entry) VALUES (?, ?, to_timestamp(?), ?, ?)",
 				[$row['userid'], $curuser['userid'], time(), $users->getIp(), $modlogentry]
 			);
 		}
@@ -114,7 +119,7 @@ if (!$ip && !$entry) {
 		<p>Login IP Matches</p>
 		<div class="ladder"><table>
 <?php
-	$loginlist = $psdb->query("SELECT `username`, `userid`, `ip`, `banstate` FROM `ntbb_users` WHERE `loginip` = ?", [$ip]);
+	$loginlist = $psdb->query("SELECT username, userid, ip, banstate FROM users WHERE loginip = ?", [$ip]);
 	foreach ($loginlist as $row) {
 		if ($row['ip'] != $ip) {
 ?>
@@ -131,7 +136,7 @@ if (!$ip && !$entry) {
 		<p>Usermodlog entries</p>
 		<div class="ladder"><table>
 <?php
-	$usermodlog = $psdb->query("SELECT * FROM `ntbb_usermodlog` WHERE `ip` = '".$psdb->escape($ip)."'");
+	$usermodlog = $psdb->query("SELECT *, extract(epoch from date) as date FROM usermodlog WHERE ip = '".$psdb->escape($ip)."'");
 	while ($row = $psdb->fetch_assoc($usermodlog)) {
 		$entry = $row['entry'];
 		$fromindex = strpos($entry, " from: ");
@@ -155,6 +160,12 @@ if (!$ip && !$entry) {
 
 	</div></div>
 <?php
+} else if ($ip) {
+?>
+<div class="pfx-panel"><div class="pfx-body ladder">
+<a href="/ladder/" class="pfx-backbutton" data-target="back"><i class="fa fa-chevron-left"></i> Ladder</a>
+<div><strong>Invalid IP address: <?= htmlspecialchars($ip) ?></strong></div>
+<?php
 } else {
 ?>
 	<div class="pfx-panel"><div class="pfx-body ladder">
@@ -168,15 +179,15 @@ if (!$ip && !$entry) {
 	}
 
 	$entry = '%' . str_replace('_', '\\_', str_replace('%', '\\%', $entry)) . '%';
-	$userlist = $psdb->query("SELECT `ntbb_users`.`username`, `ntbb_users`.`userid`, `ntbb_users`.`banstate` FROM `ntbb_users` INNER JOIN `ntbb_usermodlog` ON `ntbb_users`.`userid` = `ntbb_usermodlog`.`userid` WHERE `entry` LIKE ?", [$entry]);
+	$userlist = $psdb->query("SELECT users.username, users.userid, users.banstate FROM users INNER JOIN usermodlog ON users.userid = usermodlog.userid WHERE `entry` LIKE ?", [$entry]);
 	if ($csrfOk && isset($_POST['standing'])) {
 		$newStanding = intval($_POST['standing']);
-		$psdb->query("UPDATE ntbb_users SET banstate = ? WHERE ip = ? AND banstate != 100", [$newStanding, $ip]);
+		$psdb->query("UPDATE users SET banstate = ? WHERE ip = ? AND banstate != 100", [$newStanding, $ip]);
 
 		foreach ($userlist as $row) {
 			$modlogentry = "Standing changed to $newStanding ({$STANDINGS[$newStanding]}): {$_POST['allreason']}";
 			$psdb->query(
-				"INSERT INTO `{$psdb->prefix}usermodlog` (`userid`,`actorid`,`date`,`ip`,`entry`) VALUES (?, ?, ?, ?, ?)",
+				"INSERT INTO usermodlog (userid,actorid,date,ip,entry) VALUES (?, ?, to_timestamp(?), ?, ?)",
 				[$row['userid'], $curuser['userid'], time(), $users->getIp(), $modlogentry]
 			);
 		}

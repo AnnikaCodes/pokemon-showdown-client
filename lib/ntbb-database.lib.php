@@ -9,7 +9,6 @@ class PSDatabase {
 	var $username = null;
 	var $password = null;
 	var $database = null;
-	var $prefix = null;
 	var $charset = null;
 
 	function __construct($dbconfig) {
@@ -17,17 +16,16 @@ class PSDatabase {
 		$this->username = $dbconfig['username'];
 		$this->password = $dbconfig['password'];
 		$this->database = $dbconfig['database'];
-		$this->prefix = $dbconfig['prefix'];
 		$this->charset = $dbconfig['charset'];
 	}
 
 	function connect() {
 		if (!$this->db) {
-			$this->db = new PDO(
-				"mysql:dbname={$this->database};host={$this->server};charset={$this->charset}",
-				$this->username,
-				$this->password
-			);
+			$arguments = "pgsql:host={$this->server};port=5432;";
+			$arguments .= "dbname={$this->database};";
+			$arguments .= "user={$this->username};";
+			$arguments .= "password={$this->password}";
+			$this->db = new PDO($arguments);
 			$this->db->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 		}
 	}

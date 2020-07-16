@@ -54,10 +54,10 @@ class NTBBSession {
 			return;
 		}
 		$res = $psdb->query(
-			"SELECT sid, timeout, `{$psdb->prefix}users`.* " .
-			"FROM `{$psdb->prefix}sessions`, `{$psdb->prefix}users` " .
-			"WHERE `session` = ? " .
-				"AND `{$psdb->prefix}sessions`.`userid` = `{$psdb->prefix}users`.`userid` " .
+			"SELECT sid, extract(epoch from timeout) as timeout, users.*, extract(epoch from registertime) as registertime, extract(epoch from logintime) as logintime " .
+			"FROM sessions, users " .
+			"WHERE session = ? " .
+				"AND sessions.userid = users.userid " .
 			"LIMIT 1", [$session]);
 		if (!$res) {
 			// query problem?
@@ -72,7 +72,7 @@ class NTBBSession {
 		}
 		if (intval($sess['timeout'])<$ctime) {
 			// session expired
-			$psdb->query("DELETE FROM `{$psdb->prefix}sessions` WHERE `timeout` < ?", [$ctime]);
+			$psdb->query("DELETE FROM sessions WHERE timeout < to_timestamp(?)", [$ctime]);
 			$this->killCookie();
 			return;
 		}
@@ -170,15 +170,16 @@ class NTBBSession {
 		$userid = $this->userid($name);
 
 		$res = $psdb->query(
-			"SELECT `password`, `nonce`, `passwordhash` " .
-			"FROM `{$psdb->prefix}users` " .
-			"WHERE `userid` = ? " .
+			"SELECT password, nonce, passwordhash " .
+			"FROM users " .
+			"WHERE userid = ? " .
 			"LIMIT 1",
 			[$userid]
 		);
 		if (!$res) return false;
 
 		$user = $psdb->fetch_assoc($res);
+
 		return $this->passwordVerifyInner($userid, $pass, $user);
 	}
 
@@ -188,7 +189,7 @@ class NTBBSession {
 		// throttle
 		$ip = $this->getIp();
 		$res = $psdb->query(
-			"SELECT `count`, `time` FROM `{$psdb->prefix}loginthrottle` WHERE `ip` = ? LIMIT 1",
+			"SELECT count, extract(epoch from time) as time FROM loginthrottle WHERE ip = ? LIMIT 1",
 			[$ip]
 		);
 		$loginthrottle = null;
@@ -196,10 +197,11 @@ class NTBBSession {
 		if ($loginthrottle) {
 			if ($loginthrottle['count'] > 500) {
 				$loginthrottle['count']++;
-				$psdb->query("UPDATE `{$psdb->prefix}loginthrottle` SET count = ?, lastuserid = ?, `time` = ? WHERE ip = ?", [$loginthrottle['count'], $userid, time(), $ip]);
+				$psdb->query("UPDATE loginthrottle SET count = ?, lastuserid = ?, time = to_timestamp(?) WHERE ip = ?", [$loginthrottle['count'], $userid, time(), $ip]);
 				return false;
 			} else if ($loginthrottle['time'] + 24 * 60 * 60 < time()) {
 				$loginthrottle = [
+
 					'count' => 0,
 					'time' => time(),
 				];
@@ -225,9 +227,9 @@ class NTBBSession {
 				// wrong password
 				if ($loginthrottle) {
 					$loginthrottle['count']++;
-					$psdb->query("UPDATE `{$psdb->prefix}loginthrottle` SET count = ?, lastuserid = ?, `time` = ? WHERE ip = ?", [$loginthrottle['count'], $userid, time(), $ip]);
+					$psdb->query("UPDATE loginthrottle SET count = ?, lastuserid = ?, time = to_timestamp(?) WHERE ip = ?", [$loginthrottle['count'], $userid, time(), $ip]);
 				} else {
-					$psdb->query("INSERT INTO `{$psdb->prefix}loginthrottle` (ip, count, lastuserid, `time`) VALUES (?, 1, ?, ?)", [$ip, $userid, time()]);
+					$psdb->query("INSERT INTO loginthrottle (ip, count, lastuserid, time) VALUES (?, 1, ?, to_timestamp(?))", [$ip, $userid, time()]);
 				}
 				return false;
 			}
@@ -244,7 +246,7 @@ class NTBBSession {
 			$hash = $this->passwordHash($pass);
 			if ($hash) {
 				$psdb->query(
-					"UPDATE `{$psdb->prefix}users` SET `passwordhash`=?, `password`=NULL, `nonce`=NULL WHERE `userid`=?",
+					"UPDATE users SET passwordhash=?, password=NULL, nonce=NULL WHERE userid=?",
 					[$hash, $userid]
 				);
 			}
@@ -258,12 +260,13 @@ class NTBBSession {
 
 		$this->logout();
 		$userid = $this->userid($name);
-		$res = $psdb->query("SELECT * FROM `{$psdb->prefix}users` WHERE `userid` = ? LIMIT 1", [$userid]);
+		$res = $psdb->query("SELECT *, extract(epoch from registertime) as registertime, extract(epoch from logintime) as logintime FROM users WHERE userid = ? LIMIT 1", [$userid]);
 		if (!$res) {
 			if ($debug) error_log('no such user');
 			return $curuser;
 		}
 		$user = $psdb->fetch_assoc($res);
+
 		if ($user['banstate'] >= 100) {
 			return $curuser;
 		}
@@ -280,7 +283,7 @@ class NTBBSession {
 		$this->sid = $this->mksid($this->sid);
 		$nsidhash = $this->sidHash($this->sid);
 		$res = $psdb->query(
-			"INSERT INTO `{$psdb->prefix}sessions` (`userid`,`sid`,`time`,`timeout`,`ip`) VALUES (?,?,?,?,?)",
+			"INSERT INTO sessions (userid,sid,time,timeout,ip) VALUES (?,?,to_timestamp(?),to_timestamp(?),?)",
 			[$user['userid'], $nsidhash, $ctime, $timeout, $this->getIp()]
 		);
 		if (!$res) die;
@@ -344,7 +347,7 @@ class NTBBSession {
 		if (!$this->session) return $curuser;
 
 		$curuser = $this->getGuest();
-		$psdb->query("DELETE FROM `{$psdb->prefix}sessions` WHERE `session` = ? LIMIT 1", [$this->session]);
+		$psdb->query("DELETE FROM sessions WHERE session = ?", [$this->session]);
 		$this->sid = '';
 		$this->scookie = '';
 		$this->session = 0;
@@ -359,10 +362,11 @@ class NTBBSession {
 		$ctime = time();
 
 		$userid = $this->userid($name);
-		$res = $psdb->query("SELECT * FROM `{$psdb->prefix}users` WHERE `userid` = ? LIMIT 1", [$userid]);
+		$res = $psdb->query("SELECT *, extract(epoch from registertime) as registertime, extract(epoch from logintime) as logintime FROM users WHERE userid = ? LIMIT 1", [$userid]);
 		if (!$res) // user doesn't exist
 			return false;
 		$user = $psdb->fetch_assoc($res);
+
 		if (!$timeout) {
 			$timeout = 7*24*60*60;
 		}
@@ -370,14 +374,14 @@ class NTBBSession {
 		{
 			$modlogentry = "Password reset token generated";
 			$psdb->query(
-				"INSERT INTO `{$psdb->prefix}usermodlog` (`userid`,`actorid`,`date`,`ip`,`entry`) VALUES (?, ?, ?, ?, ?)",
+				"INSERT INTO usermodlog (userid,actorid,date,ip,entry) VALUES (?, ?, ?, ?, ?)",
 				[$user['userid'], $curuser['userid'], time(), $this->getIp(), $modlogentry]
 			);
 
 			// magical character string...
 			$token = bin2hex(random_bytes(15));
 			$res = $psdb->query(
-				"INSERT INTO `{$psdb->prefix}sessions` (`userid`,`sid`,`time`,`timeout`,`ip`) VALUES (?, ?, ?, ?, ?)",
+				"INSERT INTO sessions (userid,sid,time,timeout,ip) VALUES (?, ?, to_timestamp(?), to_timestamp(?), ?)",
 				[$user['userid'], $token, $ctime, $timeout, $this->getIp()]
 			);
 			if (!$res) die($psdb->error());
@@ -389,7 +393,10 @@ class NTBBSession {
 	function validatePasswordResetToken($token) {
 		global $psdb, $psconfig;
 		if (strlen($token) !== ($psconfig['sid_length'] * 2)) return false;
-		$res = $psdb->query("SELECT * FROM `{$psdb->prefix}sessions` WHERE `sid` = ? LIMIT 1", [$token]);
+		$res = $psdb->query(
+			"SELECT *, extract(epoch from time) as time, extract(epoch from timeout) as timeout FROM sessions WHERE sid = ? LIMIT 1",
+			[$token]
+		);
 		$session = $psdb->fetch_assoc($res);
 		if (!$session) return false;
 
@@ -411,7 +418,7 @@ class NTBBSession {
 			return $curuser;
 		}
 
-		$res = $psdb->query("SELECT * FROM `{$psdb->prefix}users` WHERE `userid` = ? LIMIT 1", [$userid]);
+		$res = $psdb->query("SELECT *, extract(epoch from registertime) as registertime, extract(epoch from logintime) as logintime FROM users WHERE userid = ? LIMIT 1", [$userid]);
 		if (!$res) // query failed for weird reason
 			return false;
 		$user = $psdb->fetch_assoc($res);
@@ -433,12 +440,14 @@ class NTBBSession {
 	function getGroupName($user=false) {
 		global $ntbb_cache;
 		$user = $this->getUser($user);
+
 		return @$ntbb_cache['groups'][$user['group']]['name'];
 	}
 
 	function getGroupSymbol($user=false) {
 		global $ntbb_cache;
 		$user = $this->getUser($user);
+
 		return @$ntbb_cache['groups'][$user['group']]['symbol'];
 	}
 
@@ -467,6 +476,7 @@ class NTBBSession {
 		if (!$user) {
 			$user = $curuser;
 		}
+
 		$ip = $this->getIp();
 		$forceUsertype = false;
 		if (in_array($ip, $psconfig['autolock_ip']) || in_array($user['ip'], $psconfig['autolock_ip'])) $forceUsertype = '5';
@@ -496,17 +506,17 @@ class NTBBSession {
 					$usertype = '5';
 				} else if (@$user['banstate'] == 0) {
 					if (@$user['registertime'] && time() - $user['registertime'] > 7*24*60*60) {
-						$res = $psdb->query("SELECT formatid FROM ntbb_ladder WHERE userid = ? LIMIT 1", [$userid]);
+						$res = $psdb->query("SELECT formatid FROM ladder WHERE userid = ? LIMIT 1", [$userid]);
 						if ($psdb->fetch_assoc($res)) {
 							$usertype = '4';
-							$psdb->query("UPDATE ntbb_users SET banstate = -10 WHERE userid = ? LIMIT 1", [$userid]);
+							$psdb->query("UPDATE users SET banstate = -10 WHERE userid = ?", [$userid]);
 						}
 					}
 				}
 			}
 			if (!@$user['logintime'] || time() - $user['logintime'] > 24*60*60) {
 				$psdb->query(
-					"UPDATE ntbb_users SET logintime = ?, loginip = ? WHERE userid = ? LIMIT 1",
+					"UPDATE users SET logintime = to_timestamp(?), loginip = ? WHERE userid = ?",
 					[time(), $ip, $userid]
 				);
 			}
@@ -515,7 +525,7 @@ class NTBBSession {
 			if ((strlen($userid) < 1) || ctype_digit($userid)) {
 				return ';;Your username must contain at least one letter.';
 			}
-			$res = $psdb->query("SELECT * FROM `{$psdb->prefix}users` WHERE `userid` = ? LIMIT 1", [$userid]);
+			$res = $psdb->query("SELECT *, extract(epoch from registertime) as registertime, extract(epoch from logintime) as logintime FROM users WHERE userid = ? LIMIT 1", [$userid]);
 			if (!$res) {
 				// query failed for weird reason
 				return ';;The login server is under heavy load, please try logging in again later';
@@ -587,34 +597,33 @@ class NTBBSession {
 		$userid = $user;
 		if (is_array($user)) $userid = $user['userid'];
 
-		$res = $psdb->query("SELECT * FROM `{$psdb->prefix}users` WHERE `userid` = ? LIMIT 1", [$userid]);
+		$res = $psdb->query("SELECT *, extract(epoch from registertime) as registertime, extract(epoch from logintime) as logintime FROM users WHERE userid = ? LIMIT 1", [$userid]);
 		if (!$res) // query failed for weird reason
 			return false;
 		$user = $psdb->fetch_assoc($res);
-		if (!$user['userid']) return false;
 
 		if (@$changes['password']) {
 			$modlogentry = "Password changed from: {$user['passwordhash']}";
 			$psdb->query(
-				"INSERT INTO `{$psdb->prefix}usermodlog` (`userid`,`actorid`,`date`,`ip`,`entry`) VALUES (?,?,?,?,?)",
+				"INSERT INTO usermodlog (userid,actorid,date,ip,entry) VALUES (?,?,?,?,?)",
 				[$user['userid'], $curuser['userid'], time(), $this->getIp(), $modlogentry]
 			);
 			$passwordhash = $this->passwordHash($changes['password']);
 			$psdb->query(
-				"UPDATE `{$psdb->prefix}users` SET `passwordhash`=?, `password`=NULL, `nonce`=NULL WHERE `userid` = ?",
+				"UPDATE users SET passwordhash=?, password=NULL, nonce=NULL WHERE userid = ?",
 				[$passwordhash, $user['userid']]
 			);
 			if ($psdb->error()) {
 				return false;
 			}
-			$psdb->query("DELETE FROM `{$psdb->prefix}sessions` WHERE `userid` = ?", [$user['userid']]);
+			$psdb->query("DELETE FROM sessions WHERE userid = ?", [$user['userid']]);
 			if ($curuser['userid'] === $userid) {
 				$this->login($userid, $changes['password']);
 			}
 		}
 		if (!empty($changes['group'])) {
 			$group = intval($changes['group']);
-			$psdb->query("UPDATE `{$psdb->prefix}users` SET `group` = $group WHERE `userid` = ?", [$user['userid']]);
+			$psdb->query("UPDATE users SET group = $group WHERE userid = ?", [$user['userid']]);
 			if ($psdb->error()) {
 				return false;
 			}
@@ -625,7 +634,7 @@ class NTBBSession {
 			$newUserid = $this->userid($newUsername);
 			if ($userid !== $newUserid) return false;
 			$psdb->query(
-				"UPDATE `{$psdb->prefix}users` SET `username` = ? WHERE `userid` = ?",
+				"UPDATE users SET username = ? WHERE userid = ?",
 				[$newUsername, $userid]
 			);
 			if ($psdb->error()) {
@@ -634,7 +643,7 @@ class NTBBSession {
 		}
 		if (!empty($changes['userdata'])) {
 			$psdb->query(
-				"UPDATE `{$psdb->prefix}users` SET `userdata` = ? WHERE `userid` = ?",
+				"UPDATE users SET userdata = ? WHERE userid = ?",
 				[$changes['userdata'], $user['userid']]
 			);
 			if ($psdb->error()) {
@@ -652,13 +661,14 @@ class NTBBSession {
 		}
 		$timestamp = time() - $timeperiod;
 		$res = $psdb->query(
-			"SELECT COUNT(*) AS `registrationcount` FROM `{$psdb->prefix}users` WHERE `ip` = ? AND `registertime` > ?",
+			"SELECT COUNT(*) AS registrationcount FROM users WHERE ip = ? AND registertime > to_timestamp(?)",
 			[$ip, $timestamp]
 		);
 		if (!$res) {
 			return false;
 		}
 		$user = $psdb->fetch_assoc($res);
+
 		if ($user === NULL) {	// Should be impossible.
 			return 0;
 		}
@@ -676,13 +686,13 @@ class NTBBSession {
 			return false;
 		}
 
-		$res = $psdb->query("SELECT `userid` FROM `{$psdb->prefix}users` WHERE `userid` = ? LIMIT 1", [$user['userid']]);
+		$res = $psdb->query("SELECT userid FROM users WHERE userid = ? LIMIT 1", [$user['userid']]);
 		if ($row = $psdb->fetch_assoc($res)) {
 			return false;
 		}
 
 		$psdb->query(
-			"INSERT INTO `{$psdb->prefix}users` (`userid`,`username`,`passwordhash`,`email`,`registertime`,`ip`) VALUES (?, ?, ?, ?, ?, ?)",
+			"INSERT INTO users (userid,username,passwordhash,email,registertime,ip) VALUES (?, ?, ?, ?, to_timestamp(?), ?)",
 			[$user['userid'], $user['username'], $user['passwordhash'], @$user['email'], $ctime, $this->getIp()]
 		);
 		if ($psdb->error()) {

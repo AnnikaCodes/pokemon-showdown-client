@@ -321,14 +321,17 @@ class DefaultActionHandler {
 		}
 
 		$out = !!$psdb->query(
-			"INSERT INTO `ntbb_userstats` (`serverid`, `date`, `usercount`) " .
-				"VALUES ('" . $psdb->escape($server['id']) . "', '" . $psdb->escape($date) . "', '" . $psdb->escape($usercount) . "') " .
-				"ON DUPLICATE KEY UPDATE `date`='" . $psdb->escape($date) . "', `usercount`='" . $psdb->escape($usercount) . "'");
+			"INSERT INTO userstats (serverid, date, usercount) " .
+				"VALUES (?, to_timestamp(?), ?) " .
+				"ON CONFLICT (id) DO UPDATE SET date=to_timestamp(?), usercount=?",
+				[$server['id'], $date, $usercount, $date, $usercount]
+			);
 
 		if ($server['id'] === 'showdown') {
 			$psdb->query(
-				"INSERT INTO `ntbb_userstatshistory` (`date`, `usercount`) " .
-				"VALUES ('" . $psdb->escape($date) . "', '" . $psdb->escape($usercount) . "')");
+				"INSERT INTO userstatshistory (date, usercount) VALUES (to_timestamp(?), ?)",
+				[$date, $usercount]
+			);
 		}
 		$dispatcher->setPrefix(''); // No need for prefix since only usable by server.
 	}
@@ -419,10 +422,10 @@ class DefaultActionHandler {
 		$player = $psdb->escape($curuser['userid']);
 		$friends = array();
 		$friendsQuery = $psdb->query(
-			"SELECT `us`.`username`, `fr`.`p1`, `fr`.`accepted` " .
-			"FROM `ntbb_friendlist` AS `fr` " .
-			"INNER JOIN `ntbb_users` AS `us` ON `us`.`userid` = IF(`fr`.`p1` = '" . $player . "', `fr`.`p2`, `fr`.`p1`) " .
-			"WHERE `p1`='" . $player . "' OR `p2`='" . $player . "'"
+			"SELECT us.username, fr.p1, fr.accepted " .
+			"FROM friendlist AS fr " .
+			"INNER JOIN users AS us ON us.userid = IF(fr.p1 = '" . $player . "', fr.p2, fr.p1) " .
+			"WHERE p1='" . $player . "' OR p2='" . $player . "'"
 		);
 		while ($friend = $psdb->fetch_assoc($friendsQuery)) {
 			$prefix = '';
@@ -467,11 +470,11 @@ class DefaultActionHandler {
 		$p2 = $psdb->escape($player['userid']);
 		$res = $psdb->query(
 			"SELECT p1, accepted " .
-			"FROM `ntbb_friendlist` " .
+			"FROM friendlist " .
 			"WHERE (" .
-				"`p1`='" . $p1 . "' AND `p2`='" . $p2 . "'" .
+				"p1='" . $p1 . "' AND p2='" . $p2 . "'" .
 			") OR (" .
-				"`p1`='" . $p2 . "' AND `p2`='" . $p1 . "'" .
+				"p1='" . $p2 . "' AND p2='" . $p1 . "'" .
 			")"
 		);
 		$record = $psdb->fetch_assoc($res);
@@ -479,7 +482,7 @@ class DefaultActionHandler {
 			// A record in the database exists. Now we check if it's accepted
 			// or not. If not, we'll accept it, otherwise send an error
 			if ($record['p1'] !== $curuser['userid'] && ((int) $record['accepted']) === 0) {
-				$psdb->query("UPDATE `ntbb_friendlist` SET `accepted` = '1' WHERE `p1`='" . $p2 . "' AND `p2`='" . $p1 . "'");
+				$psdb->query("UPDATE friendlist SET accepted = '1' WHERE p1='" . $p2 . "' AND p2='" . $p1 . "'");
 				// The ] denotes that it was successful
 				die(']The friend request by ' . $player['username'] . ' has been accepted.');
 			} else {
@@ -488,7 +491,7 @@ class DefaultActionHandler {
 		}
 
 		// Everything's okay, so insert it
-		$psdb->query("INSERT INTO `ntbb_friendlist` (`p1`, `p2`) VALUES ('" . $p1 . "', '" . $p2 . "')");
+		$psdb->query("INSERT INTO friendlist (p1, p2) VALUES ('" . $p1 . "', '" . $p2 . "')");
 		// The ] denotes that it was successful
 		die(']A friend request has been sent to ' . $player['username'] . '!');
 	}
@@ -507,15 +510,14 @@ class DefaultActionHandler {
 		$userid = $psdb->escape($curuser['userid']);
 		$player = $psdb->escape($reqData['player']);
 		$res = $psdb->query(
-			"DELETE FROM `ntbb_friendlist` " .
+			"DELETE FROM friendlist " .
 			"WHERE (" .
-				"`p1`='" . $userid . "' AND `p2`='" . $player . "'" .
+				"p1='" . $userid . "' AND p2='" . $player . "'" .
 			") OR (" .
-				"`p1`='" . $player . "' AND `p2`='" . $userid . "'" .
-			") " .
-			"LIMIT 1"
+				"p1='" . $player . "' AND p2='" . $userid . "'" .
+			") "
 		);
-		if (mysqli_affected_rows($psdb->db)) die(']' . $reqData['player'] . ' has been removed from your friend list.');
+		if (pg_affected_rows($res)) die(']' . $reqData['player'] . ' has been removed from your friend list.');
 		die('Could not remove ' . $reqData['player'] . ' from your friend list.');
 	}
 }
