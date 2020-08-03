@@ -189,7 +189,7 @@ class NTBBSession {
 		// throttle
 		$ip = $this->getIp();
 		$res = $psdb->query(
-			"SELECT count, extract(epoch from time) as time FROM loginthrottle WHERE ip = ? LIMIT 1",
+			"SELECT count, extract(epoch from time) as time FROM loginthrottle WHERE ip = ?",
 			[$ip]
 		);
 		$loginthrottle = null;
@@ -623,7 +623,7 @@ class NTBBSession {
 		}
 		if (!empty($changes['group'])) {
 			$group = intval($changes['group']);
-			$psdb->query("UPDATE users SET group = $group WHERE userid = ?", [$user['userid']]);
+			$psdb->query("UPDATE users SET \"group\" = $group WHERE userid = ?", [$user['userid']]);
 			if ($psdb->error()) {
 				return false;
 			}

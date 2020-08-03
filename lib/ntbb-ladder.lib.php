@@ -144,7 +144,7 @@ class NTBBLadder {
 		global $ladderdb;
 		if (!@$user['rating']) {
 			$res = $ladderdb->query(
-				"SELECT *, extract(epoch from rptime) as rptime FROM ladder WHERE userid=? AND formatid=? LIMIT 1",
+				"SELECT *, extract(epoch from rptime) as rptime FROM ladder WHERE userid=? AND formatid=?",
 				[$user['userid'], $this->formatid]
 			);
 			if (!$res) {

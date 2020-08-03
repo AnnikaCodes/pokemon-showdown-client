@@ -48,11 +48,6 @@ class PSDatabase {
 	function fetch($resource) {
 		return $resource->fetch();
 	}
-	function escape($data) {
-		$this->connect();
-		$data = $this->db->quote($data);
-		return substr($data, 1, -1);
-	}
 	function error() {
 		if ($this->db) {
 			return $this->db->errorInfo()[2];

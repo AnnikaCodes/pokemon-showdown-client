@@ -136,7 +136,7 @@ if (!$ip && !$entry) {
 		<p>Usermodlog entries</p>
 		<div class="ladder"><table>
 <?php
-	$usermodlog = $psdb->query("SELECT *, extract(epoch from date) as date FROM usermodlog WHERE ip = '".$psdb->escape($ip)."'");
+	$usermodlog = $psdb->query("SELECT *, extract(epoch from date) as date FROM usermodlog WHERE ip = ?", [$ip]);
 	while ($row = $psdb->fetch_assoc($usermodlog)) {
 		$entry = $row['entry'];
 		$fromindex = strpos($entry, " from: ");

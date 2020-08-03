@@ -419,13 +419,12 @@ class DefaultActionHandler {
 			die('Not using a valid nick; you should be registered and logged in in order to add friends.');
 		}
 
-		$player = $psdb->escape($curuser['userid']);
 		$friends = array();
 		$friendsQuery = $psdb->query(
 			"SELECT us.username, fr.p1, fr.accepted " .
 			"FROM friendlist AS fr " .
-			"INNER JOIN users AS us ON us.userid = IF(fr.p1 = '" . $player . "', fr.p2, fr.p1) " .
-			"WHERE p1='" . $player . "' OR p2='" . $player . "'"
+			"INNER JOIN users AS us ON us.userid = IF(fr.p1 = :player, fr.p2, fr.p1) " .
+			"WHERE p1 = :player OR p2 = :player", [':player' => $curuser['userid']]
 		);
 		while ($friend = $psdb->fetch_assoc($friendsQuery)) {
 			$prefix = '';
@@ -466,23 +465,21 @@ class DefaultActionHandler {
 		if (!$player) die('The given player does not exist.');
 
 		// Check if there isn't a friendship between those two already
-		$p1 = $psdb->escape($curuser['userid']);
-		$p2 = $psdb->escape($player['userid']);
 		$res = $psdb->query(
 			"SELECT p1, accepted " .
 			"FROM friendlist " .
 			"WHERE (" .
-				"p1='" . $p1 . "' AND p2='" . $p2 . "'" .
+				"p1 = ? AND p2 = ?" .
 			") OR (" .
-				"p1='" . $p2 . "' AND p2='" . $p1 . "'" .
-			")"
+				"p1 = ? AND p2 = ?" .
+			")", [$curuser['userid'], $player['userid'], $player['userid'], $curuser['userid']]
 		);
 		$record = $psdb->fetch_assoc($res);
 		if ($record) {
 			// A record in the database exists. Now we check if it's accepted
 			// or not. If not, we'll accept it, otherwise send an error
 			if ($record['p1'] !== $curuser['userid'] && ((int) $record['accepted']) === 0) {
-				$psdb->query("UPDATE friendlist SET accepted = '1' WHERE p1='" . $p2 . "' AND p2='" . $p1 . "'");
+				$psdb->query("UPDATE friendlist SET accepted = '1' WHERE p1 = ? AND p2 = ?", [$p2, $p1]);
 				// The ] denotes that it was successful
 				die(']The friend request by ' . $player['username'] . ' has been accepted.');
 			} else {
@@ -491,7 +488,7 @@ class DefaultActionHandler {
 		}
 
 		// Everything's okay, so insert it
-		$psdb->query("INSERT INTO friendlist (p1, p2) VALUES ('" . $p1 . "', '" . $p2 . "')");
+		$psdb->query("INSERT INTO friendlist (p1, p2) VALUES (?, ?)", [$p1, $p2]);
 		// The ] denotes that it was successful
 		die(']A friend request has been sent to ' . $player['username'] . '!');
 	}
@@ -507,15 +504,13 @@ class DefaultActionHandler {
 			die('Not using a valid nick; you should be registered and logged in in order to add friends.');
 		}
 
-		$userid = $psdb->escape($curuser['userid']);
-		$player = $psdb->escape($reqData['player']);
 		$res = $psdb->query(
 			"DELETE FROM friendlist " .
 			"WHERE (" .
-				"p1='" . $userid . "' AND p2='" . $player . "'" .
+				"p1 = ? AND p2 = ?" .
 			") OR (" .
-				"p1='" . $player . "' AND p2='" . $userid . "'" .
-			") "
+				"p1 = ? AND p2 = ?" .
+			") ", [$curuser['userid'], $reqData['player'], $reqData['player'], $curuser['userid']]
 		);
 		if (pg_affected_rows($res)) die(']' . $reqData['player'] . ' has been removed from your friend list.');
 		die('Could not remove ' . $reqData['player'] . ' from your friend list.');
